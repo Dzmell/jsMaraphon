@@ -17,7 +17,13 @@ rating = document.querySelector('.rating'),
 description = document.querySelector('.descriptio'),
 modalLink = document.querySelector('.modal__link'),
 searchForm = document.querySelector('.search__form'),
-searchFormInput = document.querySelector('.search__form-input');
+searchFormInput = document.querySelector('.search__form-input'),
+preloader = document.querySelector('.preloader'),
+dropdown = document.querySelectorAll('.dropdown'),
+tvShowsHead = document.querySelector('.tv-shows__head'),
+posterWrapper = document.querySelector('.poster__wrapper'),
+modalContent = document.querySelector('.modal__content'),
+pagination = document.querySelector('.pagination');
 
 
 const loading = document.createElement('div');
@@ -35,33 +41,60 @@ const DBservice = class{
          this.API_KEY = 'affc29fcc90a4770f2829685b5ce4148';
     }
     getData = async(url) => {
+        //tvShows.append(loading);
         const res = await fetch(url);
         if(res.ok) {
             return res.json();        
     }else {
         throw new Error(`can not get data ${url}`)
     }
-    }
+    };
     getTestdata = /*async*/ () => {
         return /*await*/ this.getData('test.json');
-    }
+    };
    getTestCard = () => {
        return this.getData('card.json');
-   }
+   };
    getSearchResult = query => {
-       return this.getData(`${this.Server}/search/tv?api_key=${this.API_KEY}&language=ru-RU&query=${query}`);
+       this.temp = `${this.Server}/search/tv?api_key=${this.API_KEY}&language=ru-RU&query=${query}`;
+       return this.getData(this.temp);
        //return this.getData('https://api.themoviedb.org/3/search/multi?api_key=affc29fcc90a4770f2829685b5ce4148&language=ru-RU&query=%D0%9A%D1%83%D1%85%D0%BD%D1%8F&page=1&include_adult=false');
+   };
+   getNextPage = page => {
+       return this.getData(this.temp + '&page' + page);
    }
    getTvShow = id =>{
        return this.getData(`${this.Server}/tv/${id}?api_key=${this.API_KEY}&language=ru-RU`)
        //`${this.Server}/tv/${id}?api_key=${this.API_KEY}&language=ru-RU`
-   }
+   };
+   //https://developers.themoviedb.org/3/movies/get-movie-details
+   getTopRated = () => this.getData(`${this.Server}/tv/top_rated?api_key=${this.API_KEY}&language=ru-RU`);
+   getPopular = () => this.getData(`${this.Server}/tv/popular?api_key=${this.API_KEY}&language=ru-RU`);
+   getToday = () => this.getData(`${this.Server}/tv/airing_today?api_key=${this.API_KEY}&language=ru-RU`);
+   getWeek = () => this.getData(`${this.Server}/tv/on_the_air?api_key=${this.API_KEY}&language=ru-RU`);
 }
 
+const dbService = new DBservice();
+
 console.log(new DBservice().getSearchResult("стражи галактики"));
-const renderCard = response => {
-    //console.log(response);
+const renderCard = (response, target) => {
+
+    //debugger;
+    
     tvShowList.textContent='';
+
+    console.log(response);
+    if (!response.total_results){
+        loading.remove();
+        tvShowsHead.textContent = 'Unfotinally there is no any films you want';
+        //tvShowsHead.style.cssText = 'color: red; border-bottom: 2px solid red'
+        tvShowsHead.style.color = 'red';
+        return;
+    }
+    tvShowsHead.textContent = target ? target.textContent : 'Search result';
+        //tvShowsHead.style.cssText = 'color: red; border-bottom: 2px solid red'
+        tvShowsHead.style.color = 'green';
+        
     response.results.forEach(item =>{
         const {
             backdrop_path: backdrop,
@@ -99,8 +132,15 @@ const renderCard = response => {
         tvShowList.append(card);
         tvShowList.prepend(card);
         //console.log(card);
-    })
-}
+    });
+
+    pagination.textContent = '';
+    if(!target && response.total_pages > 1){
+        for(let i = 1; i <= response.total_pages; i++){
+            pagination.innerHTML += `<li><a href="#" class="pages">${i}</a></li>`;
+        }
+    }
+};
 searchForm.addEventListener('submit', event =>{
     event.preventDefault();    
     const value = searchFormInput.value.trim();
@@ -117,17 +157,25 @@ searchForm.addEventListener('submit', event =>{
 
 
 // open or close menu
+const closeDropdown = () =>{
+    dropdown.forEach(item =>{
+        item.classList.remove('.active');
+    })
+}
+
 hamburger.addEventListener('click', () =>{
     leftMenu.classList.toggle('openMenu');
     hamburger.classList.toggle('open');
+    closeDropdown();
 });
 //console.dir
-document.body.addEventListener('click', (event) =>{
+document.body.addEventListener('click', event =>{
 //console.log(event)
 if(!event.target.closest('.left-menu')){
 //console.log('click out menu');
-leftMenu.classList.remove('openMenu');
+    leftMenu.classList.remove('openMenu');
     hamburger.classList.remove('open');
+    closeDropdown();
 }
 
 });
@@ -139,6 +187,28 @@ leftMenu.addEventListener('click', event =>{
        dropdown.classList.toggle('active');
        leftMenu.classList.add('openMenu');
        hamburger.classList.add('open');
+    }
+
+    // string 71 => const dbService = new DBservice();
+    if(target.closest('#top-rated')){
+        console.log('top-rated');
+        dbService.getTopRated().then((response) => renderCard(response, target));
+    }
+    if(target.closest('#popular')){
+        console.log('popular');
+        dbService.getPopular().then((response) => renderCard(response, target));
+    }
+    if(target.closest('#week')){
+        console.log('week');
+        dbService.getWeek().then((response) => renderCard(response, target));
+    }
+    if(target.closest('#today')){
+        console.log('today');
+        dbService.getToday().then((response) => renderCard(response, target));
+    }
+    if(target.closest('#search')){
+        tvShowList.textContent = '';
+        tvShowsHead.textContent = '';
     }
 
 });
@@ -153,11 +223,23 @@ tvShowList.addEventListener('click', event =>{
     //console.log(target);
     if(card){
 
+        preloader.style.display = 'block';
+
         new DBservice().getTvShow(card.id)
         .then(data =>{
             console.log(data);
-            tvCardImg.src =  IMG_URL + data.poster_path;
-            tvCardImg.alt =  data.name;
+
+            if(data.poster_path){
+                tvCardImg.src =  IMG_URL + data.poster_path;
+                tvCardImg.alt =  data.name;
+                posterWrapper.style.display = '';
+                modalContent.style.paddingLeft = '';
+            }else{
+                posterWrapper.style.display = 'none';
+                modalContent.style.paddingLeft = '25px';
+            }
+
+            
             modalTitle.textContent = data.name;
             //genresList.innerHTML = data.genres.reduse((acc, item) => `${acc} <li>${item.name}</li>`, '')
             /*genresList.textContent = '';
@@ -175,12 +257,19 @@ tvShowList.addEventListener('click', event =>{
             document.body.style.overflow = 'hidden';
             modal.classList.remove('hide');
         })
-
+        .finally(() =>{
+            console.log('hey hey');
+            preloader.style.display = 'none';
+        })
 
         document.body.style.overflow = 'hidden';
         modal.classList.remove('hide');
+
+       
     }
+        
 });
+
 
 //close modal window
 modal.addEventListener('click', event =>{
@@ -205,6 +294,14 @@ const changeImg = event =>{
 };
 tvShowList.addEventListener('mouseover', changeImg);
 tvShowList.addEventListener('mouseout', changeImg);
+pagination.addEventListener('click', event =>{
+    event.preventDefault();
+    const targrt = event.target;
+    if(target.classList.contains('pages')){
+        tvShow.append(loading);
+        dbService.getNextPage(target.textContent).then(renderCard);
+    }
+});
 
 
 
